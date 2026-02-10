@@ -1,0 +1,37 @@
+# FastAPI Backend Requirements
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+python-dotenv==1.0.0
+
+# Data processing
+pandas==2.1.4
+numpy==1.26.3
+
+# Visualization
+matplotlib==3.8.2
+plotly==5.18.0
+
+# LLM APIs (httpx<0.28 required: 0.28+ removed 'proxies', breaking anthropic/openai)
+httpx>=0.26.0,<0.28.0
+openai==1.10.0
+anthropic>=0.39.0
+
+# Azure OpenAI (optional - for ITSAI Platform)
+azure-identity==1.15.0
+requests==2.31.0
+
+# Code execution safety (optional - latest version for Python 3.12)
+# RestrictedPython==8.1
+
+# Statistics (optional)
+scikit-learn==1.4.0
+statsmodels==0.14.1
+
+# SQL Database Support
+sqlalchemy==2.0.23
+pyodbc==5.0.1  # SQL Server
+psycopg2-binary==2.9.9  # PostgreSQL
+pymysql==1.1.0  # MySQL
+cryptography==41.0.7  # Required for some SQL drivers
