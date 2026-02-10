@@ -90,24 +90,28 @@ async def load_default_acled_data():
 
 @app.on_event("startup")
 async def configure_llm_from_env():
-    """Pre-configure LLM from environment variables so API keys don't need to be entered in the UI."""
-    provider = os.getenv("LLM_PROVIDER", "").strip().lower() or None
-    if not provider:
+    """Pre-configure LLM from environment variables. Defaults to Claude Sonnet 4.5."""
+    provider = os.getenv("LLM_PROVIDER", "").strip().lower() or "anthropic"
+    if not provider or provider not in ("openai", "anthropic", "azure"):
+        # Default to Anthropic if no provider specified or invalid
         if os.getenv("ANTHROPIC_API_KEY"):
             provider = "anthropic"
         elif os.getenv("OPENAI_API_KEY"):
             provider = "openai"
-    if provider in ("openai", "anthropic", "azure"):
-        try:
-            llm_service.configure(
-                provider=provider,
-                api_key=None,  # use env for openai/anthropic
-                model=os.getenv("LLM_MODEL") or None,
-                azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT") or None,
-            )
-            print(f"LLM pre-configured from env: provider={provider}")
-        except Exception as e:
-            print(f"LLM env config skipped: {e}")
+        else:
+            provider = "anthropic"  # Default to Anthropic
+    
+    try:
+        llm_service.configure(
+            provider=provider,
+            api_key=None,  # use env for openai/anthropic
+            model=os.getenv("LLM_MODEL") or ("claude-sonnet-4-5" if provider == "anthropic" else None),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT") or None,
+        )
+        print(f"LLM pre-configured: provider={provider}, model={llm_service.model}")
+    except Exception as e:
+        print(f"LLM config error: {e}")
+        print("Note: Set ANTHROPIC_API_KEY in environment or .env file to use Claude")
 
 @app.get("/")
 async def root():

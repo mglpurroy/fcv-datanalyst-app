@@ -3,39 +3,33 @@
  * Root component that orchestrates the entire application
  */
 
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatInterfaceComponent } from './components/chat-interface/chat-interface.component';
-import { DataUploadComponent } from './components/data-upload/data-upload.component';
-import { ConfigPanelComponent } from './components/config-panel/config-panel.component';
 import { ChatService } from './services/chat.service';
+import { ApiService } from './services/api.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   imports: [
     CommonModule,
-    ChatInterfaceComponent,
-    DataUploadComponent,
-    ConfigPanelComponent
+    ChatInterfaceComponent
   ],
   template: `
     <div class="app-container">
-      <!-- Header -->
-      <header class="app-header">
-        <button type="button" class="header-toggle" (click)="sidebarOpen = !sidebarOpen" title="{{ sidebarOpen ? 'Hide sidebar' : 'Show sidebar' }}" aria-label="Toggle sidebar">
-          ☰
-        </button>
-        <div class="header-title">
-          <h1>🌍 FCV Data Chatbot</h1>
-          <p class="subtitle">Quantitative conflict and violence data queries</p>
-        </div>
-      </header>
-
       <!-- Main Content -->
       <div class="main-content">
         <!-- Sidebar -->
         <aside class="sidebar" [class.sidebar-collapsed]="!sidebarOpen">
+          <div class="sidebar-header">
+            <button type="button" class="sidebar-toggle" (click)="sidebarOpen = !sidebarOpen" title="{{ sidebarOpen ? 'Hide sidebar' : 'Show sidebar' }}" aria-label="Toggle sidebar">
+              ☰
+            </button>
+            <button type="button" class="theme-toggle" (click)="toggleTheme()" [attr.aria-label]="darkMode ? 'Switch to light mode' : 'Switch to dark mode'" title="{{ darkMode ? 'Switch to light mode' : 'Switch to dark mode' }}">
+              {{ darkMode ? '☀' : '☾' }}
+            </button>
+          </div>
           <div class="bot-purpose">
             <h3>📌 What this bot does</h3>
             <p><strong>Purpose:</strong> This is a <strong>data chatbot</strong> for <strong>quantitative queries</strong> only. It runs analysis on the pre-loaded dataset and returns results, charts, or CSV—it does not answer from general knowledge or external sources.</p>
@@ -50,7 +44,7 @@ import { ChatService } from './services/chat.service';
             </ul>
             <p><strong>❌ Not capable of:</strong></p>
             <ul class="cap-list remit">
-              <li>Qualitative or policy questions (e.g. “root causes of FCV”, “why did X happen?”)</li>
+              <li>Qualitative or policy questions (e.g. "root causes of FCV", "why did X happen?")</li>
               <li>Recommendations, predictions, or opinions</li>
               <li>General knowledge not in the pre-loaded data</li>
               <li>Editing or changing the underlying dataset—the data is pre-loaded and fixed for your session</li>
@@ -58,13 +52,6 @@ import { ChatService } from './services/chat.service';
             <p class="remit">If your question is outside this scope, the bot will ask you to reformulate as a data-focused question.</p>
             <p class="note">The bot will be enhanced over time and will connect to other data sources; for now it uses pre-loaded ACLED data only.</p>
           </div>
-          <app-data-upload 
-            (dataLoaded)="onDataLoaded($event)">
-          </app-data-upload>
-          
-          <app-config-panel
-            [disabled]="!dataLoaded">
-          </app-config-panel>
           
           <div class="data-info" *ngIf="dataSchema">
             <h3>📊 Data Info</h3>
@@ -84,8 +71,7 @@ import { ChatService } from './services/chat.service';
 
         <!-- Chat Area -->
         <main class="chat-area">
-          <app-chat-interface 
-            [disabled]="!dataLoaded">
+          <app-chat-interface>
           </app-chat-interface>
         </main>
       </div>
@@ -96,7 +82,7 @@ import { ChatService } from './services/chat.service';
       height: 100vh;
       display: flex;
       flex-direction: column;
-      background: #f5f7fa;
+      background: var(--chat-bg);
     }
 
     .app-header {
@@ -105,27 +91,30 @@ import { ChatService } from './services/chat.service';
       gap: 16px;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-      padding: 16px 24px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      padding: 14px 20px;
+      box-shadow: var(--chat-shadow-sm);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .header-toggle {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.3);
-      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
       color: white;
-      font-size: 18px;
+      font-size: 16px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.2s;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .header-toggle:hover {
-      background: rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.15);
+      border-color: rgba(255,255,255,0.3);
+      transform: translateY(-1px);
     }
 
     .header-title {
@@ -133,15 +122,19 @@ import { ChatService } from './services/chat.service';
     }
 
     .app-header h1 {
-      font-size: 24px;
+      font-size: 20px;
       margin: 0;
       font-weight: 700;
+      letter-spacing: -0.02em;
+      font-family: 'Plus Jakarta Sans', sans-serif;
     }
 
     .subtitle {
       margin: 2px 0 0 0;
-      opacity: 0.9;
-      font-size: 13px;
+      opacity: 0.85;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.01em;
     }
 
     .main-content {
@@ -154,12 +147,62 @@ import { ChatService } from './services/chat.service';
     .sidebar {
       width: 350px;
       flex-shrink: 0;
-      background: white;
-      border-right: 1px solid #e0e0e0;
+      background: var(--chat-surface);
+      border-right: 1px solid var(--chat-border);
       overflow-y: auto;
       overflow-x: hidden;
-      padding: 20px;
-      transition: width 0.25s ease, margin-left 0.25s ease;
+      padding: 18px 16px;
+      transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), margin-left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--chat-border);
+    }
+
+    .sidebar-toggle,
+    .theme-toggle {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      border: 1px solid var(--chat-border);
+      background: var(--chat-surface);
+      color: var(--chat-text-primary);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .sidebar-toggle:hover,
+    .theme-toggle:hover {
+      background: var(--chat-surface-hover);
+      border-color: var(--chat-border-strong);
+      transform: translateY(-1px);
+    }
+
+    .sidebar.sidebar-collapsed .sidebar-header {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      margin: 0;
+      padding: 0;
+      border: none;
+      display: flex;
+      gap: 8px;
+    }
+
+    .sidebar.sidebar-collapsed .sidebar-toggle,
+    .sidebar.sidebar-collapsed .theme-toggle {
+      box-shadow: var(--chat-shadow-md);
     }
 
     .sidebar.sidebar-collapsed {
@@ -171,43 +214,47 @@ import { ChatService } from './services/chat.service';
 
     .bot-purpose {
       margin-bottom: 20px;
-      padding: 14px;
-      background: #f0f4ff;
-      border-radius: 10px;
-      border: 1px solid #c5d4f7;
-      font-size: 12px;
-      line-height: 1.45;
-      color: #333;
+      padding: 16px;
+      background: var(--chat-accent-soft);
+      border-radius: var(--chat-radius-md);
+      border: 1px solid var(--chat-accent-dim);
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: var(--chat-text-primary);
+      box-shadow: var(--chat-shadow-sm);
     }
     .bot-purpose h3 {
-      margin: 0 0 10px 0;
+      margin: 0 0 12px 0;
       font-size: 14px;
-      color: #2E86AB;
+      font-weight: 600;
+      color: var(--chat-accent);
+      letter-spacing: -0.01em;
     }
     .bot-purpose p {
-      margin: 0 0 10px 0;
+      margin: 0 0 12px 0;
     }
     .bot-purpose p:last-child {
       margin-bottom: 0;
     }
     .bot-purpose .cap-list {
-      margin: 4px 0 10px 0;
-      padding-left: 18px;
-      font-size: 11.5px;
-      line-height: 1.4;
+      margin: 6px 0 12px 0;
+      padding-left: 20px;
+      font-size: 12px;
+      line-height: 1.5;
     }
     .bot-purpose .cap-list.remit {
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .bot-purpose .remit {
-      color: #555;
+      color: var(--chat-text-secondary);
       font-style: italic;
-      font-size: 11.5px;
+      font-size: 12px;
     }
     .bot-purpose .note {
-      margin-top: 10px;
-      font-size: 11px;
-      color: #2E86AB;
+      margin-top: 12px;
+      font-size: 11.5px;
+      color: var(--chat-accent);
+      font-weight: 500;
     }
 
     .chat-area {
@@ -220,26 +267,39 @@ import { ChatService } from './services/chat.service';
 
     .data-info {
       margin-top: 20px;
-      padding: 15px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border: 1px solid #e0e0e0;
+      padding: 16px;
+      background: var(--chat-surface);
+      border-radius: var(--chat-radius-md);
+      border: 1px solid var(--chat-border);
+      box-shadow: var(--chat-shadow-sm);
     }
 
     .data-info h3 {
-      margin: 0 0 12px 0;
-      font-size: 16px;
-      color: #333;
+      margin: 0 0 14px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--chat-text-primary);
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      font-family: 'JetBrains Mono', monospace;
     }
 
     .info-item {
       margin-bottom: 10px;
-      font-size: 13px;
-      color: #555;
+      font-size: 12.5px;
+      color: var(--chat-text-secondary);
+      line-height: 1.5;
+    }
+
+    .info-item:last-child {
+      margin-bottom: 0;
     }
 
     .info-item strong {
-      color: #333;
+      color: var(--chat-text-primary);
+      font-weight: 600;
     }
 
     @media (max-width: 768px) {
@@ -256,18 +316,75 @@ import { ChatService } from './services/chat.service';
     }
   `]
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   dataLoaded = false;
   dataSchema: any = null;
   sidebarOpen = true;
+  darkMode = false;
 
-  constructor(private chatService: ChatService) {
+  constructor(
+    private chatService: ChatService,
+    private apiService: ApiService
+  ) {
     this.chatService.dataSchema$.subscribe(schema => {
       this.dataSchema = schema;
+      if (schema) {
+        this.dataLoaded = true;
+      }
     });
+    
+    // Load theme preference from localStorage
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+      this.darkMode = true;
+      this.applyTheme(true);
+    } else if (savedTheme === null) {
+      // Check system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        this.darkMode = true;
+        this.applyTheme(true);
+      }
+    }
+  }
+  
+  toggleTheme(): void {
+    this.darkMode = !this.darkMode;
+    this.applyTheme(this.darkMode);
+    localStorage.setItem('theme', this.darkMode ? 'dark' : 'light');
+  }
+  
+  private applyTheme(isDark: boolean): void {
+    if (isDark) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
   }
 
-  onDataLoaded(event: any): void {
-    this.dataLoaded = true;
+  ngOnInit(): void {
+    // Auto-load data schema on startup (data is pre-loaded by backend)
+    this.apiService.getDataSchema('default').subscribe({
+      next: (response) => {
+        if (response.schema) {
+          this.chatService.setDataSchema(response.schema);
+          this.dataLoaded = true;
+        }
+      },
+      error: (error) => {
+        console.error('Failed to load data schema:', error);
+        // Data might still be loading, try again after a delay
+        setTimeout(() => {
+          this.apiService.getDataSchema('default').subscribe({
+            next: (response) => {
+              if (response.schema) {
+                this.chatService.setDataSchema(response.schema);
+                this.dataLoaded = true;
+              }
+            }
+          });
+        }, 2000);
+      }
+    });
   }
 }

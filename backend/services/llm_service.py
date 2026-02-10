@@ -31,7 +31,7 @@ class LLMService:
     def __init__(self):
         self.provider = "anthropic"
         self.api_key = None
-        self.model = "claude-opus-4-6"
+        self.model = "claude-sonnet-4-5"
         self.azure_endpoint = None
         self.client = None
     

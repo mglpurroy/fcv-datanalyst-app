@@ -9,6 +9,8 @@ import { CommonModule } from '@angular/common';
 import { ChatMessage } from '../../models/chat.model';
 import { ChartDisplayComponent } from '../chart-display/chart-display.component';
 
+declare var Plotly: any;
+
 @Component({
   selector: 'app-message',
   standalone: true,
@@ -31,28 +33,40 @@ import { ChartDisplayComponent } from '../chart-display/chart-display.component'
 
         <div *ngIf="message.role === 'assistant'">
           <!-- Code Block (collapsed by default) -->
-          <div class="code-block" *ngIf="message.code">
-            <div class="section-header" (click)="codeCollapsed = !codeCollapsed">
-              <span class="section-title">Generated Code</span>
-              <span class="chevron">{{ codeCollapsed ? '▶' : '▼' }}</span>
+          <div class="code-block" *ngIf="message.code" role="region" [attr.aria-label]="'Code block: ' + getCodeLanguage()">
+            <div class="section-header" (click)="codeCollapsed = !codeCollapsed" role="button" [attr.aria-expanded]="!codeCollapsed" tabindex="0" (keydown.enter)="codeCollapsed = !codeCollapsed" (keydown.space)="codeCollapsed = !codeCollapsed; $event.preventDefault()">
+              <div class="code-header-left">
+                <div class="code-dots" aria-hidden="true">
+                  <span class="dot dot-red"></span>
+                  <span class="dot dot-yellow"></span>
+                  <span class="dot dot-green"></span>
+                </div>
+                <span class="section-title">{{ getCodeLanguage() }}</span>
+              </div>
+              <div class="header-actions" (click)="$event.stopPropagation()">
+                <button type="button" class="btn-icon" (click)="copyCode()" [attr.aria-label]="codeCopied ? 'Code copied' : 'Copy code'" title="Copy code">
+                  {{ codeCopied ? '✓ Copied' : 'Copy' }}
+                </button>
+                <span class="chevron" aria-hidden="true">{{ codeCollapsed ? '▶' : '▼' }}</span>
+              </div>
             </div>
             <div class="section-body" *ngIf="!codeCollapsed">
-              <pre><code>{{ message.code }}</code></pre>
+              <pre><code [innerHTML]="highlightCode(message.code)"></code></pre>
             </div>
           </div>
 
           <!-- Output (collapsed by default) -->
-          <div class="output-block" *ngIf="message.content">
-            <div class="section-header" (click)="outputCollapsed = !outputCollapsed">
+          <div class="output-block" *ngIf="message.content" role="region" aria-label="Results">
+            <div class="section-header" (click)="outputCollapsed = !outputCollapsed" role="button" [attr.aria-expanded]="!outputCollapsed" tabindex="0" (keydown.enter)="outputCollapsed = !outputCollapsed" (keydown.space)="outputCollapsed = !outputCollapsed; $event.preventDefault()">
               <span class="section-title">Results</span>
               <div class="header-actions" (click)="$event.stopPropagation()">
-                <button type="button" class="btn-icon" (click)="copyResults()" title="Copy results">
+                <button type="button" class="btn-icon" (click)="copyResults()" [attr.aria-label]="resultsCopied ? 'Results copied' : 'Copy results'" title="Copy results">
                   {{ resultsCopied ? '✓ Copied' : 'Copy' }}
                 </button>
-                <button type="button" class="btn-icon" (click)="downloadResultsCsv()" title="Download as CSV">
+                <button type="button" class="btn-icon" (click)="downloadResultsCsv()" aria-label="Download results as CSV" title="Download as CSV">
                   CSV
                 </button>
-                <span class="chevron" (click)="outputCollapsed = !outputCollapsed">{{ outputCollapsed ? '▶' : '▼' }}</span>
+                <span class="chevron" aria-hidden="true" (click)="outputCollapsed = !outputCollapsed">{{ outputCollapsed ? '▶' : '▼' }}</span>
               </div>
             </div>
             <div class="section-body" *ngIf="!outputCollapsed">
@@ -68,13 +82,28 @@ import { ChartDisplayComponent } from '../chart-display/chart-display.component'
             </app-chart-display>
           </div>
 
-          <!-- Key takeaways as plain text -->
-          <div class="key-takeaways-text" *ngIf="message.narrative">{{ message.narrative }}</div>
+          <!-- Key takeaways formatted -->
+          <div class="key-takeaways" *ngIf="message.narrative">
+            <div class="key-takeaways-header">
+              <span class="key-takeaways-icon">💡</span>
+              <span class="key-takeaways-title">Key Takeaways</span>
+            </div>
+            <div class="key-takeaways-content" [innerHTML]="formatTakeaways(message.narrative)"></div>
+          </div>
 
           <!-- Download outputs (assistant message with any content) -->
           <div class="download-row" *ngIf="hasDownloadableContent()">
-            <button type="button" class="btn-download" (click)="downloadOutputs()" title="Download results and narrative as text file">
-              Download outputs
+            <button type="button" class="btn-download" (click)="downloadOutputs()" aria-label="Download results and narrative as text file" title="Download results and narrative as text file">
+              📄 Download text outputs
+            </button>
+            <button 
+              *ngIf="message.charts && message.charts.length > 0" 
+              type="button" 
+              class="btn-download" 
+              (click)="downloadAllCharts()" 
+              [attr.aria-label]="'Download all ' + message.charts.length + ' charts'"
+              title="Download all charts">
+              📊 Download all charts ({{ message.charts.length }})
             </button>
           </div>
 
@@ -94,10 +123,11 @@ import { ChartDisplayComponent } from '../chart-display/chart-display.component'
       margin-bottom: 14px;
       padding: 14px 16px;
       border-radius: var(--chat-radius-lg);
-      max-width: min(90%, 780px);
+      max-width: min(95%, 920px);
       box-shadow: var(--chat-shadow-sm);
       border: 1px solid transparent;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      transition: border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .user-message {
@@ -169,35 +199,156 @@ import { ChartDisplayComponent } from '../chart-display/chart-display.component'
       overflow: hidden;
     }
 
-    .key-takeaways-text {
-      margin-top: 12px;
-      padding: 0;
+    .key-takeaways {
+      margin-top: 16px;
+      padding: 16px 18px;
+      background: linear-gradient(135deg, var(--chat-accent-soft), rgba(74, 144, 226, 0.05));
+      border-radius: var(--chat-radius-md);
+      border: 1px solid var(--chat-accent-dim);
+      box-shadow: var(--chat-shadow-sm);
+    }
+
+    .key-takeaways-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--chat-accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .key-takeaways-icon {
+      font-size: 16px;
+    }
+
+    .key-takeaways-title {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .key-takeaways-content {
       font-size: 14px;
-      line-height: 1.55;
+      line-height: 1.7;
       color: var(--chat-text-primary);
-      white-space: pre-wrap;
+    }
+
+    .key-takeaways-content p {
+      margin: 0 0 10px 0;
+    }
+
+    .key-takeaways-content p:last-child {
+      margin-bottom: 0;
+    }
+
+    .key-takeaways-content strong {
+      color: var(--chat-accent);
+      font-weight: 600;
+    }
+
+    .key-takeaways-content ul,
+    .key-takeaways-content ol {
+      margin: 8px 0 8px 20px;
+      padding: 0;
+    }
+
+    .key-takeaways-content li {
+      margin: 6px 0;
     }
 
     .code-block {
-      background: #1e2235;
+      background: var(--chat-code-bg);
       border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: var(--chat-shadow-md);
+    }
+
+    .code-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .code-dots {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      opacity: 0.8;
+    }
+
+    .dot-red {
+      background: #f7768e;
+    }
+
+    .dot-yellow {
+      background: #e0a458;
+    }
+
+    .dot-green {
+      background: #3dd68c;
     }
 
     .code-block .section-header {
-      background: #161929;
+      background: var(--chat-code-surface);
       color: #7b84a3;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      padding: 7px 12px;
     }
 
     .code-block .section-header:hover {
       background: #1a1e32;
     }
 
+    .code-block .section-title {
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--chat-code-comment);
+    }
+
+    .code-block .section-body {
+      padding: 14px 16px;
+    }
+
     .code-block .section-body pre,
     .code-block .section-body code {
-      background: #1e2235;
+      background: var(--chat-code-bg);
       color: #e2e5ec;
-      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      line-height: 1.7;
+      margin: 0;
+      padding: 0;
+    }
+
+    .code-block .code-keyword {
+      color: var(--chat-code-keyword);
+      font-weight: 600;
+    }
+
+    .code-block .code-string {
+      color: var(--chat-code-string);
+    }
+
+    .code-block .code-comment {
+      color: var(--chat-code-comment);
+      font-style: italic;
+    }
+
+    .code-block .code-function {
+      color: var(--chat-code-function);
+    }
+
+    .code-block .code-number {
+      color: var(--chat-code-number);
     }
 
     .output-block {
@@ -215,17 +366,18 @@ import { ChartDisplayComponent } from '../chart-display/chart-display.component'
       justify-content: space-between;
       align-items: center;
       padding: 8px 12px;
-      background: rgba(0, 0, 0, 0.03);
-      font-size: 12px;
+      background: rgba(0, 0, 0, 0.02);
+      font-size: 11.5px;
       font-weight: 600;
       color: var(--chat-text-secondary);
       cursor: pointer;
       user-select: none;
-      transition: background 0.15s ease;
+      transition: background 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      border-radius: var(--chat-radius-sm) var(--chat-radius-sm) 0 0;
     }
 
     .section-header:hover {
-      background: rgba(0, 0, 0, 0.06);
+      background: rgba(0, 0, 0, 0.04);
     }
 
     .section-title {
@@ -245,20 +397,24 @@ import { ChartDisplayComponent } from '../chart-display/chart-display.component'
     }
 
     .btn-icon {
-      padding: 4px 8px;
+      padding: 4px 10px;
       font-size: 11px;
       border: 1px solid var(--chat-border);
-      border-radius: var(--chat-radius-sm);
-      background: var(--chat-bg-elevated);
+      border-radius: 6px;
+      background: var(--chat-surface);
       cursor: pointer;
       color: var(--chat-text-secondary);
-      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+      font-weight: 500;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      white-space: nowrap;
     }
 
     .btn-icon:hover {
-      background: #f4f7ff;
+      background: var(--chat-surface-hover);
       border-color: var(--chat-border-strong);
       color: var(--chat-text-primary);
+      transform: translateY(-1px);
     }
 
     .error-header {
@@ -285,27 +441,39 @@ import { ChartDisplayComponent } from '../chart-display/chart-display.component'
 
     .charts-container {
       margin-top: 12px;
+      width: 100%;
+      overflow-x: auto;
+      overflow-y: visible;
     }
 
     .download-row {
       margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
     .btn-download {
-      padding: 7px 12px;
+      padding: 7px 14px;
       font-size: 12px;
       border: 1px solid var(--chat-accent);
-      border-radius: var(--chat-radius-sm);
+      border-radius: 7px;
       background: var(--chat-accent);
       color: #fff;
       cursor: pointer;
       font-weight: 600;
-      transition: background 0.15s ease, border-color 0.15s ease;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 1px 2px rgba(74, 144, 226, 0.2);
     }
 
     .btn-download:hover {
       background: var(--chat-accent-hover);
       border-color: var(--chat-accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
     }
   `]
 })
@@ -315,6 +483,7 @@ export class MessageComponent {
   codeCollapsed = true;
   outputCollapsed = true;
   resultsCopied = false;
+  codeCopied = false;
   private copyFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
 
   copyResults(): void {
@@ -322,6 +491,68 @@ export class MessageComponent {
     this.copyToClipboard(this.message.content);
     this.resultsCopied = true;
     this.clearCopyFeedback(() => (this.resultsCopied = false));
+  }
+
+  copyCode(): void {
+    if (!this.message?.code) return;
+    this.copyToClipboard(this.message.code);
+    this.codeCopied = true;
+    this.clearCopyFeedback(() => (this.codeCopied = false));
+  }
+
+  getCodeLanguage(): string {
+    if (!this.message?.code) return 'Code';
+    const code = this.message.code.toLowerCase();
+    if (code.includes('select') || code.includes('from') || code.includes('where')) return 'SQL';
+    if (code.includes('import ') || code.includes('def ') || code.includes('pd.')) return 'Python';
+    return 'Code';
+  }
+
+  highlightCode(code: string): string {
+    if (!code) return '';
+    const language = this.getCodeLanguage().toLowerCase();
+    
+    // Escape HTML
+    let highlighted = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
+    if (language === 'sql') {
+      // SQL keywords
+      const keywords = /\b(SELECT|FROM|WHERE|JOIN|ON|GROUP BY|ORDER BY|HAVING|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|AS|AND|OR|NOT|IN|IS|NULL|BETWEEN|LIKE|EXISTS|CASE|WHEN|THEN|ELSE|END|DISTINCT|COUNT|SUM|AVG|MAX|MIN|ROUND|LIMIT|OFFSET|UNION|ALL|WITH|INTO|VALUES|SET|TABLE|INDEX|VIEW|INNER|LEFT|RIGHT|OUTER|CROSS|FULL|DESC|ASC)\b/gi;
+      highlighted = highlighted.replace(keywords, '<span class="code-keyword">$1</span>');
+      
+      // Strings
+      highlighted = highlighted.replace(/'([^']*)'/g, '<span class="code-string">\'$1\'</span>');
+      
+      // Comments
+      highlighted = highlighted.replace(/(--.*$)/gm, '<span class="code-comment">$1</span>');
+      
+      // Numbers
+      highlighted = highlighted.replace(/\b(\d+\.?\d*)\b/g, '<span class="code-number">$1</span>');
+    } else if (language === 'python') {
+      // Python keywords
+      const keywords = /\b(import|from|def|class|return|if|elif|else|for|while|try|except|with|as|in|not|and|or|True|False|None|print|self|lambda|yield|raise|pass|break|continue|global|nonlocal|assert|del|async|await)\b/g;
+      highlighted = highlighted.replace(keywords, '<span class="code-keyword">$1</span>');
+      
+      // Strings
+      highlighted = highlighted.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"[^"]*"|'[^']*')/g, '<span class="code-string">$1</span>');
+      
+      // Comments
+      highlighted = highlighted.replace(/(#.*$)/gm, '<span class="code-comment">$1</span>');
+      
+      // Decorators
+      highlighted = highlighted.replace(/(@\w+)/g, '<span class="code-function">$1</span>');
+      
+      // Functions
+      highlighted = highlighted.replace(/\b([a-zA-Z_]+)\s*(?=\()/g, '<span class="code-function">$1</span>');
+      
+      // Numbers
+      highlighted = highlighted.replace(/\b(\d+\.?\d*)\b/g, '<span class="code-number">$1</span>');
+    }
+    
+    return highlighted;
   }
 
   private copyToClipboard(text: string): void {
@@ -419,5 +650,135 @@ export class MessageComponent {
     a.download = `chat-output-${this.message.timestamp ? new Date(this.message.timestamp).toISOString().slice(0, 19).replace(/:/g, '-') : 'export'}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  downloadAllCharts(): void {
+    if (!this.message.charts || this.message.charts.length === 0) return;
+    
+    // For each chart, trigger download with a small delay to avoid browser blocking
+    this.message.charts.forEach((chart, index) => {
+      setTimeout(() => {
+        if (chart.type === 'matplotlib') {
+          // Download matplotlib image
+          const link = document.createElement('a');
+          link.href = `data:image/png;base64,${chart.data}`;
+          link.download = `chart-${index + 1}-${Date.now()}.png`;
+          link.click();
+        } else if (chart.type === 'plotly' && typeof Plotly !== 'undefined') {
+          // For Plotly, we need to find the chart element
+          // Since we can't directly access child component methods, we'll use a workaround
+          // by creating a temporary div and rendering the chart there
+          const tempDiv = document.createElement('div');
+          tempDiv.style.width = '1200px';
+          tempDiv.style.height = '800px';
+          document.body.appendChild(tempDiv);
+          
+          try {
+            const plotData = JSON.parse(chart.data);
+            Plotly.newPlot(tempDiv, plotData.data, plotData.layout, { staticPlot: true }).then(() => {
+              Plotly.downloadImage(tempDiv, {
+                format: 'png',
+                width: 1200,
+                height: 800,
+                filename: `chart-${index + 1}-${Date.now()}`
+              }).then(() => {
+                document.body.removeChild(tempDiv);
+              });
+            });
+          } catch (error) {
+            console.error('Error downloading Plotly chart:', error);
+            document.body.removeChild(tempDiv);
+          }
+        }
+      }, index * 500); // 500ms delay between each download
+    });
+  }
+
+  formatTakeaways(text: string): string {
+    if (!text) return '';
+    
+    // Remove leading "Key Takeaways:" or similar headings from the text
+    let cleaned = text.trim();
+    cleaned = cleaned.replace(/^(Key Takeaways|Key Takeaway|Takeaways|Takeaway)[:：]\s*/i, '');
+    cleaned = cleaned.replace(/^##\s*Key Takeaways?\s*##?\s*/i, '');
+    cleaned = cleaned.replace(/^#\s*Key Takeaways?\s*#?\s*/i, '');
+    cleaned = cleaned.trim();
+    
+    // Escape HTML to prevent XSS first
+    let formatted = cleaned
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
+    // Convert markdown-style bold **text** to <strong> (before other processing)
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Split into lines for processing
+    const lines = formatted.split('\n');
+    const result: string[] = [];
+    let currentList: string[] = [];
+    let listType: 'ol' | 'ul' | null = null;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      if (!line) {
+        // Empty line - close any open list and add paragraph break
+        if (currentList.length > 0) {
+          const tag = listType === 'ol' ? 'ol' : 'ul';
+          result.push(`<${tag}>${currentList.join('')}</${tag}>`);
+          currentList = [];
+          listType = null;
+        }
+        continue;
+      }
+      
+      // Check for numbered list (1. item, 2. item, etc.)
+      const numberedMatch = line.match(/^(\d+)\.\s+(.+)$/);
+      if (numberedMatch) {
+        if (listType !== 'ol') {
+          if (currentList.length > 0 && listType === 'ul') {
+            result.push(`<ul>${currentList.join('')}</ul>`);
+            currentList = [];
+          }
+          listType = 'ol';
+        }
+        currentList.push(`<li>${numberedMatch[2]}</li>`);
+        continue;
+      }
+      
+      // Check for bullet points (- item or • item)
+      const bulletMatch = line.match(/^[-•]\s+(.+)$/);
+      if (bulletMatch) {
+        if (listType !== 'ul') {
+          if (currentList.length > 0 && listType === 'ol') {
+            result.push(`<ol>${currentList.join('')}</ol>`);
+            currentList = [];
+          }
+          listType = 'ul';
+        }
+        currentList.push(`<li>${bulletMatch[1]}</li>`);
+        continue;
+      }
+      
+      // Regular text line - close any open list first
+      if (currentList.length > 0) {
+        const tag = listType === 'ol' ? 'ol' : 'ul';
+        result.push(`<${tag}>${currentList.join('')}</${tag}>`);
+        currentList = [];
+        listType = null;
+      }
+      
+      // Add as paragraph
+      result.push(`<p>${line}</p>`);
+    }
+    
+    // Close any remaining list
+    if (currentList.length > 0) {
+      const tag = listType === 'ol' ? 'ol' : 'ul';
+      result.push(`<${tag}>${currentList.join('')}</${tag}>`);
+    }
+    
+    return result.join('');
   }
 }

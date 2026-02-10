@@ -81,7 +81,7 @@ const SUGGESTED_PROMPTS: { icon: string; text: string }[] = [
             <span *ngIf="isLoading">...</span>
           </button>
         </div>
-        <p class="keyboard-hint">
+        <p class="keyboard-hint" id="keyboard-hint">
           <span class="kbd">Enter</span> to send · <span class="kbd">Shift + Enter</span> for new line
         </p>
         <div class="input-actions">
@@ -123,32 +123,36 @@ const SUGGESTED_PROMPTS: { icon: string; text: string }[] = [
 
     .messages-inner {
       width: 100%;
-      max-width: 860px;
+      max-width: 960px;
       margin: 0 auto;
     }
 
     .welcome-message {
-      margin: 34px auto;
-      padding: 32px;
-      background: var(--chat-bg-elevated);
+      margin: 40px auto;
+      padding: 40px;
+      background: var(--chat-surface);
       border-radius: var(--chat-radius-lg);
       border: 1px solid var(--chat-border);
       box-shadow: var(--chat-shadow-md);
+      animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      max-width: 600px;
     }
 
     .welcome-message h2 {
       color: var(--chat-text-primary);
-      margin-bottom: var(--chat-space-3);
-      letter-spacing: -0.02em;
-      font-size: 26px;
+      margin-bottom: var(--chat-space-4);
+      letter-spacing: -0.03em;
+      font-size: 24px;
+      font-weight: 700;
       line-height: 1.2;
+      font-family: 'Plus Jakarta Sans', sans-serif;
     }
 
     .welcome-message p {
-      margin: 0 0 var(--chat-space-2) 0;
+      margin: 0 0 var(--chat-space-3) 0;
       color: var(--chat-text-secondary);
-      line-height: 1.55;
-      font-size: 14px;
+      line-height: 1.6;
+      font-size: 13.5px;
     }
 
     .welcome-message p.welcome-intro {
@@ -160,7 +164,7 @@ const SUGGESTED_PROMPTS: { icon: string; text: string }[] = [
       color: var(--chat-accent);
       margin: var(--chat-space-3) 0 var(--chat-space-4);
       background: var(--chat-accent-soft);
-      border: 1px solid rgba(86, 104, 232, 0.18);
+      border: 1px solid rgba(74, 144, 226, 0.18);
       border-radius: var(--chat-radius-sm);
       padding: 10px 12px;
     }
@@ -176,27 +180,30 @@ const SUGGESTED_PROMPTS: { icon: string; text: string }[] = [
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: var(--chat-space-3);
-      margin-top: var(--chat-space-2);
+      margin-top: var(--chat-space-3);
     }
 
     .suggested-card {
-      padding: 14px 15px;
+      padding: 16px;
       border-radius: var(--chat-radius-md);
       border: 1px solid var(--chat-border);
-      background: var(--chat-bg-elevated);
+      background: var(--chat-surface);
       cursor: pointer;
       text-align: left;
-      font-size: 13px;
-      line-height: 1.45;
+      font-size: 12.5px;
+      line-height: 1.5;
       color: var(--chat-text-primary);
-      transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       box-shadow: var(--chat-shadow-sm);
+      position: relative;
+      overflow: hidden;
     }
 
     .suggested-card:hover {
       border-color: var(--chat-accent);
-      box-shadow: var(--chat-shadow-md);
-      transform: translateY(-1px);
+      box-shadow: var(--chat-shadow-md), var(--chat-glow);
+      transform: translateY(-2px);
+      background: var(--chat-surface-hover);
     }
 
     .suggested-icon {
@@ -213,37 +220,33 @@ const SUGGESTED_PROMPTS: { icon: string; text: string }[] = [
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 14px 16px;
-      background: var(--chat-bg-elevated);
+      padding: 14px 18px;
+      background: var(--chat-surface);
       border-radius: var(--chat-radius-md);
       border: 1px solid var(--chat-border);
       margin-top: var(--chat-space-3);
       color: var(--chat-text-secondary);
       box-shadow: var(--chat-shadow-sm);
+      animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .thinking-dots {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
     }
 
     .thinking-dots .dot {
-      width: 7px;
-      height: 7px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: var(--chat-accent);
-      animation: pulseDot 1.4s ease-in-out infinite;
+      animation: pulse 1.4s ease-in-out infinite;
     }
 
     .thinking-dots .dot:nth-child(1) { animation-delay: 0s; }
     .thinking-dots .dot:nth-child(2) { animation-delay: 0.2s; }
     .thinking-dots .dot:nth-child(3) { animation-delay: 0.4s; }
-
-    @keyframes pulseDot {
-      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-      40% { transform: scale(1); opacity: 1; }
-    }
 
     .input-area {
       padding: var(--chat-space-5);
@@ -255,17 +258,18 @@ const SUGGESTED_PROMPTS: { icon: string; text: string }[] = [
       display: flex;
       gap: 10px;
       align-items: flex-end;
-      border-radius: var(--chat-radius-lg);
+      border-radius: var(--chat-radius-md);
       border: 1px solid var(--chat-border);
-      background: var(--chat-surface-muted);
-      padding: 6px 8px 6px 14px;
-      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+      background: var(--chat-bg);
+      padding: 5px 5px 5px 14px;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: var(--chat-shadow-sm);
     }
 
     .input-wrapper.input-focused {
       border-color: var(--chat-accent);
-      box-shadow: 0 0 0 3px var(--chat-accent-soft);
-      background: var(--chat-bg-elevated);
+      box-shadow: 0 0 0 2px var(--chat-accent-dim), var(--chat-shadow-sm);
+      background: var(--chat-surface);
     }
 
     .chat-input {
@@ -298,40 +302,50 @@ const SUGGESTED_PROMPTS: { icon: string; text: string }[] = [
       background: var(--chat-accent);
       color: white;
       border: none;
-      border-radius: 10px;
+      border-radius: 9px;
       font-weight: 600;
+      font-size: 13px;
       cursor: pointer;
-      transition: background 0.15s, transform 0.15s;
+      transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
       min-width: 80px;
-      height: 42px;
+      height: 36px;
       align-self: flex-end;
+      box-shadow: 0 1px 2px rgba(74, 144, 226, 0.2);
     }
 
     .send-button:hover:not(:disabled) {
       background: var(--chat-accent-hover);
       transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
     }
 
     .send-button:disabled {
-      background: #c6cee6;
+      background: var(--chat-border);
+      color: var(--chat-text-tertiary);
       cursor: not-allowed;
       transform: none;
+      box-shadow: none;
     }
 
     .keyboard-hint {
-      margin: 8px 0 0 0;
-      font-size: 11px;
-      color: var(--chat-text-muted);
+      margin: 10px 0 0 0;
+      font-size: 10.5px;
+      color: var(--chat-text-tertiary);
       text-align: center;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
     }
 
     .keyboard-hint .kbd {
-      font-family: monospace;
-      padding: 2px 6px;
-      background: rgba(86, 104, 232, 0.12);
+      font-family: 'JetBrains Mono', monospace;
+      padding: 3px 7px;
+      background: var(--chat-accent-dim);
       border-radius: 4px;
-      font-size: 11px;
+      font-size: 10px;
       color: var(--chat-text-secondary);
+      opacity: 0.7;
+      font-weight: 500;
     }
 
     .input-actions {
@@ -368,6 +382,45 @@ const SUGGESTED_PROMPTS: { icon: string; text: string }[] = [
     @media (max-width: 720px) {
       .suggested-cards {
         grid-template-columns: 1fr;
+      }
+      
+      .welcome-message {
+        padding: var(--chat-space-4);
+        margin: 20px auto;
+      }
+      
+      .welcome-message h2 {
+        font-size: 20px;
+      }
+      
+      .input-wrapper {
+        padding: 4px 4px 4px 12px;
+      }
+      
+      .send-button {
+        min-width: 70px;
+        padding: 8px 16px;
+        font-size: 12px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .messages-area {
+        padding: var(--chat-space-3);
+      }
+      
+      .input-area {
+        padding: var(--chat-space-3);
+      }
+      
+      .welcome-message {
+        padding: var(--chat-space-3);
+        margin: 12px auto;
+      }
+      
+      .keyboard-hint {
+        font-size: 10px;
+        gap: 12px;
       }
     }
   `]
