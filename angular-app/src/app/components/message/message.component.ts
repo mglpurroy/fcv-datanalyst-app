@@ -808,11 +808,15 @@ export class MessageComponent {
       s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
       // Inline code `code`
       s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-      // Bold **text** or __text__
-      s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+      // Bold **text** or __text__ (allow optional space after/before delimiters)
+      s = s.replace(/\*\*\s*(.+?)\s*\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/__\s*(.+?)\s*__/g, '<strong>$1</strong>');
+      // Orphaned ** at start of line with no closing ** → bold the rest of the string
+      s = s.replace(/^\*\*\s*(.+)$/g, '<strong>$1</strong>');
+      // Strip any remaining stray ** markers that didn't match a pair
+      s = s.replace(/\*\*/g, '');
       // Italic *text* or _text_  (single, not inside a word)
-      s = s.replace(/(?<!\w)\*(.+?)\*(?!\w)/g, '<em>$1</em>');
+      s = s.replace(/(?<!\w)\*\s*(.+?)\s*\*(?!\w)/g, '<em>$1</em>');
       s = s.replace(/(?<!\w)_(.+?)_(?!\w)/g, '<em>$1</em>');
       // Strikethrough ~~text~~
       s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
