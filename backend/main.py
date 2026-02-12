@@ -332,22 +332,48 @@ async def chat(request: ChatRequest):
         
         # Get data
         df = data_loader.get_data(session_id)
-        if df is None:
+        wdi_requested = data360_service.needs_wdi_data(request.message)
+        if df is None and not wdi_requested:
             raise HTTPException(status_code=404, detail="No data loaded. Please upload data first.")
+        if df is None:
+            df = pd.DataFrame()
         
         # Get schema for system prompt
         schema = data_loader.get_schema(df)
         
         # Optional enrichment: load World Bank population data only when requested.
         df_pop = pd.DataFrame()
+        df_wdi = pd.DataFrame()
         population_warnings: List[str] = []
         if data360_service.needs_population_data(request.message):
             try:
-                pop_result = data360_service.build_population_for_acled(df)
+                requested_countries = data360_service.extract_requested_countries(request.message, df)
+                pop_result = data360_service.build_population_for_acled(
+                    df,
+                    requested_countries=requested_countries,
+                )
                 df_pop = pop_result.df_pop
                 population_warnings = pop_result.warnings
             except Exception as pop_error:
                 population_warnings = [f"Population enrichment failed: {str(pop_error)}"]
+
+        wdi_warnings: List[str] = []
+        wdi_indicator: Optional[str] = None
+        if wdi_requested:
+            try:
+                requested_countries = data360_service.extract_requested_countries(request.message, df)
+                if not requested_countries:
+                    requested_countries = data360_service.extract_countries_from_text(request.message)
+                wdi_result = data360_service.build_wdi_dataset_for_query(
+                    request.message,
+                    df=df,
+                    requested_countries=requested_countries,
+                )
+                df_wdi = wdi_result.df_wdi
+                wdi_indicator = wdi_result.indicator
+                wdi_warnings = wdi_result.warnings
+            except Exception as wdi_error:
+                wdi_warnings = [f"WDI/Data360 enrichment failed: {str(wdi_error)}"]
 
         # Agentic: get structured query spec first (planning step)
         query_spec = await llm_service.get_query_spec(request.message)
@@ -369,8 +395,19 @@ async def chat(request: ChatRequest):
                     "join_guidance": "Join ACLED and population with country + year. Build year from event_date if needed.",
                 }
             }
+        if not df_wdi.empty:
+            schema.setdefault("aux_dataframes", {})
+            schema["aux_dataframes"]["df_wdi"] = {
+                "description": f"World Bank Data360 indicator dataset ({wdi_indicator or 'unknown indicator'})",
+                "columns": list(df_wdi.columns),
+                "shape": df_wdi.shape,
+                "join_guidance": "df_wdi has iso3/year/value (and indicator). For country analysis, map country->iso3 then join on year.",
+            }
         if population_warnings:
             schema["aux_warnings"] = population_warnings
+        if wdi_warnings:
+            schema.setdefault("aux_warnings", [])
+            schema["aux_warnings"].extend(wdi_warnings)
         
         # Call LLM to get code (with spec if we got one)
         llm_response = await llm_service.get_analysis_code(
@@ -424,7 +461,7 @@ async def chat(request: ChatRequest):
                     summary_data=None,
                     narrative=None
                 )
-        execution_result = code_executor.execute_safely(code, df, df_pop=df_pop)
+        execution_result = code_executor.execute_safely(code, df, df_pop=df_pop, df_wdi=df_wdi)
         out_output = execution_result.get("output", "")
         out_success = execution_result.get("success", False)
         out_error = execution_result.get("error")
