@@ -411,11 +411,13 @@ async def chat(request: ChatRequest):
             out_error = None
             out_success = True
         
-        # Key takeaways: use end of LLM response if present, else generate
-        narrative = code_executor.extract_key_takeaways(llm_response)
-        if narrative is None:
+        # Key takeaways: ALWAYS generate from actual execution output to avoid hallucination.
+        # The LLM's pre-execution "key takeaways" are unreliable because the LLM
+        # writes them before seeing the real numbers — so we never use them.
+        narrative = None
+        if out_success and out_output and len(out_output.strip()) > 10:
             needs_narrative_response = llm_service.needs_narrative(request.message)
-            if needs_narrative_response and out_success:
+            if needs_narrative_response:
                 narrative = await llm_service.generate_narrative(
                     user_question=request.message,
                     analysis_output=out_output,

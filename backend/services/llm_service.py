@@ -145,7 +145,7 @@ class LLMService:
 **Code Format (when you do output code):**
 ALWAYS wrap your code in ```python and ``` markers. When the question is out of scope, output only the remit sentence with no code block.
 
-**Key takeaways (at the end of your response):** After the code block, add a short "Key takeaways:" section with 2-4 punchy sentences that summarize the main finding and numbers (e.g. "Key takeaway: Q4 revenue reached $4.6M, a 12.2% increase over Q3. The primary driver was expansion revenue from existing Enterprise accounts."). Use "Key takeaway:" or "Key takeaways:" followed by concise, data-specific sentences. Place this only after the closing ``` of the code block."""
+**IMPORTANT: Do NOT write "Key takeaways" or any narrative summary after the code block.** The system will generate an accurate narrative from the actual execution results. Your job is ONLY to produce correct, executable Python code."""
         return prompt
 
     _SPEC_SYSTEM = """You are a query specifier for conflict/ACLED data. Given the user's request, output ONLY a single valid JSON object. No markdown, no explanation, no code block wrapper.
@@ -287,22 +287,29 @@ Example: {"intent":"top 10 non-state actors per country-admin1","date_range":"20
     
     async def generate_narrative(self, user_question: str, analysis_output: str,
                                 analysis_data: Optional[Dict[str, Any]] = None) -> str:
-        """Generate key takeaways from the analysis (used when the main LLM response did not include them)."""
-        narrative_prompt = f"""Based on the following data analysis, write 2-4 key takeaways. Use this exact format:
+        """Generate key takeaways from the ACTUAL execution output (post-execution, grounded in real numbers)."""
+        narrative_prompt = f"""You are summarising ACTUAL data analysis results. Write 2-4 key takeaways.
 
+CRITICAL RULES:
+- Use ONLY the numbers, names, and dates that appear in the "Analysis Results" below.
+- Do NOT invent, extrapolate, or round numbers beyond what the output shows.
+- If the output shows a date range (e.g. 2018-2026), do NOT claim data from outside that range.
+- If unsure about a number, omit it rather than guess.
+
+Format — use exactly this structure:
 Key takeaways:
-Key takeaway: [One punchy sentence with the main number or finding.]
-Key takeaway: [Another sentence with a specific number or trend.]
-Key takeaway: [Optional: driver or implication.]
+- [One punchy sentence with the main finding and exact number from the output.]
+- [Another sentence citing a specific number or ranking from the output.]
+- [Optional: a brief observation about a trend visible in the output.]
 
 User Question: {user_question}
 
-Analysis Results:
+Analysis Results (this is the ACTUAL output from executed code — treat these numbers as ground truth):
 {analysis_output[:3000]}
 
 {f"Key Data Points: {analysis_data}" if analysis_data else ""}
 
-Be concise. Use specific numbers and trends from the data. Each takeaway should be one sentence. Output only the "Key takeaways:" block, no other text."""
+Output ONLY the "Key takeaways:" block. No other text, no preamble, no code."""
         
         messages = [{"role": "user", "content": narrative_prompt}]
         
