@@ -55,8 +55,8 @@ declare var Plotly: any;
             </div>
           </div>
 
-          <!-- Output (collapsed by default) -->
-          <div class="output-block" *ngIf="message.content" role="region" aria-label="Results">
+          <!-- Output from executed code (collapsed by default) -->
+          <div class="output-block" *ngIf="message.content && hasCodeOutput()" role="region" aria-label="Results">
             <div class="section-header" (click)="outputCollapsed = !outputCollapsed" role="button" [attr.aria-expanded]="!outputCollapsed" tabindex="0" (keydown.enter)="outputCollapsed = !outputCollapsed" (keydown.space)="outputCollapsed = !outputCollapsed; $event.preventDefault()">
               <span class="section-title">Results</span>
               <div class="header-actions" (click)="$event.stopPropagation()">
@@ -71,6 +71,21 @@ declare var Plotly: any;
             </div>
             <div class="section-body" *ngIf="!outputCollapsed">
               <pre>{{ message.content }}</pre>
+            </div>
+          </div>
+
+          <!-- LLM-only output (always expanded) -->
+          <div class="llm-output-block" *ngIf="isLlmOnlyOutput()" role="region" aria-label="Assistant response">
+            <div class="section-header static-header">
+              <span class="section-title">Assistant response</span>
+              <div class="header-actions">
+                <button type="button" class="btn-icon" (click)="copyResults()" [attr.aria-label]="resultsCopied ? 'Response copied' : 'Copy response'" title="Copy response">
+                  {{ resultsCopied ? '✓ Copied' : 'Copy' }}
+                </button>
+              </div>
+            </div>
+            <div class="section-body">
+              <div class="assistant-response-content" [innerHTML]="formatAssistantResponse(message.content || '')"></div>
             </div>
           </div>
 
@@ -419,6 +434,38 @@ declare var Plotly: any;
       border: 1px solid var(--chat-border);
     }
 
+    .llm-output-block {
+      margin-top: 12px;
+      border-radius: var(--chat-radius-md);
+      overflow: hidden;
+      background: var(--chat-surface-muted);
+      border: 1px solid var(--chat-border);
+      box-shadow: var(--chat-shadow-sm);
+    }
+
+    .llm-output-block .static-header {
+      cursor: default;
+    }
+
+    .llm-output-block .static-header:hover {
+      background: rgba(0, 0, 0, 0.02);
+    }
+
+    .assistant-response-content {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--chat-text-primary);
+      white-space: normal;
+    }
+
+    .assistant-response-content p {
+      margin: 0 0 10px 0;
+    }
+
+    .assistant-response-content p:last-child {
+      margin-bottom: 0;
+    }
+
     .error-block {
       background: #fff1f3;
       border: 1px solid rgba(187, 46, 69, 0.35);
@@ -627,6 +674,18 @@ export class MessageComponent {
   private clearCopyFeedback(callback: () => void): void {
     if (this.copyFeedbackTimeout) clearTimeout(this.copyFeedbackTimeout);
     this.copyFeedbackTimeout = setTimeout(callback, 2000);
+  }
+
+  hasCodeOutput(): boolean {
+    return !!this.message?.code;
+  }
+
+  isLlmOnlyOutput(): boolean {
+    return !this.hasCodeOutput() && !!this.message?.content;
+  }
+
+  formatAssistantResponse(text: string): string {
+    return this.formatTakeaways(text || '');
   }
 
   hasDownloadableContent(): boolean {
