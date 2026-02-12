@@ -4,7 +4,7 @@
  * Code and results default to collapsed; key takeaways are rendered as plain text.
  */
 
-import { Component, Input } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatMessage } from '../../models/chat.model';
 import { ChartDisplayComponent } from '../chart-display/chart-display.component';
@@ -55,7 +55,7 @@ declare var Plotly: any;
             </div>
           </div>
 
-          <!-- Output from executed code (collapsed by default) -->
+          <!-- Output from executed code (expanded if conversational, collapsed if data) -->
           <div class="output-block" *ngIf="message.content && hasCodeOutput()" role="region" aria-label="Results">
             <div class="section-header" (click)="outputCollapsed = !outputCollapsed" role="button" [attr.aria-expanded]="!outputCollapsed" tabindex="0" (keydown.enter)="outputCollapsed = !outputCollapsed" (keydown.space)="outputCollapsed = !outputCollapsed; $event.preventDefault()">
               <span class="section-title">Results</span>
@@ -587,7 +587,7 @@ declare var Plotly: any;
     }
   `]
 })
-export class MessageComponent {
+export class MessageComponent implements OnInit {
   @Input() message!: ChatMessage;
 
   codeCollapsed = true;
@@ -595,6 +595,13 @@ export class MessageComponent {
   resultsCopied = false;
   codeCopied = false;
   private copyFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  ngOnInit(): void {
+    // Expand output by default if it's conversational or analytical (has charts/narrative)
+    if (this.hasCodeOutput() && this.shouldExpandOutput()) {
+      this.outputCollapsed = false;
+    }
+  }
 
   copyResults(): void {
     if (!this.message?.content) return;
@@ -682,6 +689,68 @@ export class MessageComponent {
 
   isLlmOnlyOutput(): boolean {
     return !this.hasCodeOutput() && !!this.message?.content;
+  }
+
+  isConversationalOutput(): boolean {
+    // Check if output is conversational (remit messages, greetings, help text)
+    // rather than data/analysis output - these should be expanded
+    if (!this.message?.content) return false;
+    
+    const content = this.message.content.toLowerCase().trim();
+    
+    // Remit message pattern
+    if (content.includes('beyond my remit') || content.includes('data-focused question')) {
+      return true;
+    }
+    
+    // Greeting/help patterns
+    const greetingPatterns = [
+      'hello',
+      'i\'m here to help',
+      'please ask me',
+      'how can i assist',
+      'data-focused question',
+      'such as:'
+    ];
+    if (greetingPatterns.some(pattern => content.includes(pattern))) {
+      return true;
+    }
+    
+    // Short, sentence-like output (likely conversational, not data tables)
+    const lines = content.split('\n').filter(l => l.trim().length > 0);
+    if (lines.length <= 10 && content.length < 500) {
+      // Check if it's mostly sentences (not tables/data)
+      const hasTableIndicators = /^\s*[\w\s]+\s+\|\s+[\w\s]+/m.test(content) || 
+                                 /\d+\s+\d+\s+\d+/m.test(content) ||
+                                 content.includes('   ') || // multiple spaces (table alignment)
+                                 content.split('\t').length > 2; // tabs (CSV-like)
+      
+      if (!hasTableIndicators) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  shouldExpandOutput(): boolean {
+    // Expand output if:
+    // 1. It's conversational (remit messages, greetings)
+    // 2. It's analytical (has charts or narrative/key takeaways) - user wants to see results immediately
+    if (this.isConversationalOutput()) {
+      return true;
+    }
+    
+    // Analytical outputs with charts or narrative should be expanded
+    if (this.message?.charts && this.message.charts.length > 0) {
+      return true;
+    }
+    
+    if (this.message?.narrative) {
+      return true;
+    }
+    
+    return false;
   }
 
   formatAssistantResponse(text: string): string {
