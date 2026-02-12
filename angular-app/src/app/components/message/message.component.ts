@@ -257,6 +257,69 @@ declare var Plotly: any;
       margin: 6px 0;
     }
 
+    .key-takeaways-content li ul,
+    .key-takeaways-content li ol {
+      margin: 4px 0 4px 18px;
+    }
+
+    .key-takeaways-content em {
+      font-style: italic;
+      color: var(--chat-text-secondary);
+    }
+
+    .key-takeaways-content del {
+      text-decoration: line-through;
+      opacity: 0.65;
+    }
+
+    .key-takeaways-content code {
+      font-family: 'JetBrains Mono', 'Consolas', monospace;
+      font-size: 0.88em;
+      padding: 2px 6px;
+      background: var(--chat-accent-dim);
+      border-radius: 4px;
+      color: var(--chat-accent-text);
+    }
+
+    .key-takeaways-content a {
+      color: var(--chat-accent);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .key-takeaways-content a:hover {
+      color: var(--chat-accent-hover);
+    }
+
+    .key-takeaways-content blockquote {
+      margin: 10px 0;
+      padding: 8px 14px;
+      border-left: 3px solid var(--chat-accent);
+      background: var(--chat-accent-dim);
+      border-radius: 0 var(--chat-radius-sm) var(--chat-radius-sm) 0;
+      font-style: italic;
+      color: var(--chat-text-secondary);
+    }
+
+    .key-takeaways-content h3,
+    .key-takeaways-content h4,
+    .key-takeaways-content h5 {
+      margin: 14px 0 8px 0;
+      font-weight: 600;
+      color: var(--chat-accent);
+      line-height: 1.3;
+    }
+
+    .key-takeaways-content h3 { font-size: 15px; }
+    .key-takeaways-content h4 { font-size: 14px; }
+    .key-takeaways-content h5 { font-size: 13px; }
+
+    .key-takeaways-content hr {
+      border: none;
+      border-top: 1px solid var(--chat-border);
+      margin: 12px 0;
+    }
+
     .code-block {
       background: var(--chat-code-bg);
       border: 1px solid rgba(255,255,255,0.06);
@@ -694,91 +757,158 @@ export class MessageComponent {
     });
   }
 
+  /**
+   * Convert markdown-formatted key takeaways text into clean HTML.
+   *
+   * Supported markdown:
+   *   **bold**, *italic*, `inline code`, ~~strikethrough~~
+   *   # / ## / ### headings
+   *   - / • / * unordered lists (with nested sub-items via indentation)
+   *   1. / 2. ordered lists
+   *   "Key takeaway:" repeated-line pattern (converted to bullet list)
+   *   > blockquotes
+   *   --- / *** / ___ horizontal rules
+   *   [link text](url) links
+   *   Blank-line paragraph separation
+   */
   formatTakeaways(text: string): string {
     if (!text) return '';
-    
-    // Remove leading "Key Takeaways:" or similar headings from the text
+
+    // ── 1. Strip leading "Key Takeaways:" header variants ──
     let cleaned = text.trim();
-    cleaned = cleaned.replace(/^(Key Takeaways|Key Takeaway|Takeaways|Takeaway)[:：]\s*/i, '');
-    cleaned = cleaned.replace(/^##\s*Key Takeaways?\s*##?\s*/i, '');
-    cleaned = cleaned.replace(/^#\s*Key Takeaways?\s*#?\s*/i, '');
+    cleaned = cleaned.replace(/^#{1,3}\s*Key Takeaways?\s*#*\s*/i, '');
+    cleaned = cleaned.replace(/^(Key Takeaways?|Takeaways?)[:：]\s*/i, '');
     cleaned = cleaned.trim();
-    
-    // Escape HTML to prevent XSS first
-    let formatted = cleaned
+
+    // ── 2. Normalise "Key takeaway: …" repeated lines into bullet list ──
+    //    LLM often outputs:  Key takeaway: sentence.\nKey takeaway: sentence.
+    const ktPattern = /^Key takeaway:\s*/i;
+    const rawLines = cleaned.split('\n');
+    const ktCount = rawLines.filter(l => ktPattern.test(l.trim())).length;
+    if (ktCount >= 2) {
+      cleaned = rawLines.map(l => {
+        const trimmed = l.trim();
+        if (ktPattern.test(trimmed)) {
+          return '- ' + trimmed.replace(ktPattern, '');
+        }
+        return l;
+      }).join('\n');
+    }
+
+    // ── 3. Escape HTML (XSS prevention) ──
+    let safe = cleaned
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    
-    // Convert markdown-style bold **text** to <strong> (before other processing)
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    
-    // Split into lines for processing
-    const lines = formatted.split('\n');
-    const result: string[] = [];
-    let currentList: string[] = [];
-    let listType: 'ol' | 'ul' | null = null;
-    
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+    // ── 4. Inline markdown → HTML ──
+    const inlineMarkdown = (s: string): string => {
+      // Links  [text](url)
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      // Inline code `code`
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // Bold **text** or __text__
+      s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+      // Italic *text* or _text_  (single, not inside a word)
+      s = s.replace(/(?<!\w)\*(.+?)\*(?!\w)/g, '<em>$1</em>');
+      s = s.replace(/(?<!\w)_(.+?)_(?!\w)/g, '<em>$1</em>');
+      // Strikethrough ~~text~~
+      s = s.replace(/~~(.+?)~~/g, '<del>$1</del>');
+      return s;
+    };
+
+    // ── 5. Block-level parsing ──
+    const lines = safe.split('\n');
+    const html: string[] = [];
+
+    // Track open list stack: each entry is { tag: 'ul'|'ol', indent: number }
+    const listStack: { tag: string; indent: number }[] = [];
+
+    const closeListsTo = (targetIndent: number) => {
+      while (listStack.length > 0 && listStack[listStack.length - 1].indent >= targetIndent) {
+        const popped = listStack.pop()!;
+        html.push(`</${popped.tag}>`);
+      }
+    };
+    const closeAllLists = () => closeListsTo(0);
+
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      
-      if (!line) {
-        // Empty line - close any open list and add paragraph break
-        if (currentList.length > 0) {
-          const tag = listType === 'ol' ? 'ol' : 'ul';
-          result.push(`<${tag}>${currentList.join('')}</${tag}>`);
-          currentList = [];
-          listType = null;
-        }
+      const raw = lines[i];
+      const trimmed = raw.trim();
+
+      // ── Empty line → close lists, paragraph break ──
+      if (!trimmed) {
+        closeAllLists();
         continue;
       }
-      
-      // Check for numbered list (1. item, 2. item, etc.)
-      const numberedMatch = line.match(/^(\d+)\.\s+(.+)$/);
-      if (numberedMatch) {
-        if (listType !== 'ol') {
-          if (currentList.length > 0 && listType === 'ul') {
-            result.push(`<ul>${currentList.join('')}</ul>`);
-            currentList = [];
+
+      // ── Horizontal rule ──
+      if (/^([-*_])\1{2,}\s*$/.test(trimmed)) {
+        closeAllLists();
+        html.push('<hr>');
+        continue;
+      }
+
+      // ── Headings: # ## ### ──
+      const headingMatch = trimmed.match(/^(#{1,3})\s+(.+?)(?:\s*#+)?$/);
+      if (headingMatch) {
+        closeAllLists();
+        const level = Math.min(headingMatch[1].length + 2, 6); // map # → h3, ## → h4, ### → h5
+        html.push(`<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`);
+        continue;
+      }
+
+      // ── Blockquote (&gt; text) ──
+      const bqMatch = trimmed.match(/^&gt;\s*(.*)$/);
+      if (bqMatch) {
+        closeAllLists();
+        html.push(`<blockquote>${inlineMarkdown(bqMatch[1])}</blockquote>`);
+        continue;
+      }
+
+      // ── List items (ordered + unordered, with nesting via indent) ──
+      const indent = raw.search(/\S/);  // leading whitespace count
+      const olMatch = trimmed.match(/^(\d+)[.)]\s+(.+)$/);
+      const ulMatch = trimmed.match(/^[-•*]\s+(.+)$/);
+
+      if (olMatch || ulMatch) {
+        const itemText = olMatch ? olMatch[2] : ulMatch![1];
+        const tag = olMatch ? 'ol' : 'ul';
+        const nestLevel = Math.floor(indent / 2); // 0, 1, 2…
+
+        // Close deeper lists
+        while (listStack.length > 0 && listStack[listStack.length - 1].indent > nestLevel) {
+          const popped = listStack.pop()!;
+          html.push(`</${popped.tag}>`);
+        }
+
+        // Open new list if needed (different tag or deeper)
+        if (listStack.length === 0 || listStack[listStack.length - 1].indent < nestLevel
+            || listStack[listStack.length - 1].tag !== tag) {
+          // If same indent but different tag, close old first
+          if (listStack.length > 0 && listStack[listStack.length - 1].indent === nestLevel
+              && listStack[listStack.length - 1].tag !== tag) {
+            const popped = listStack.pop()!;
+            html.push(`</${popped.tag}>`);
           }
-          listType = 'ol';
+          html.push(`<${tag}>`);
+          listStack.push({ tag, indent: nestLevel });
         }
-        currentList.push(`<li>${numberedMatch[2]}</li>`);
+
+        html.push(`<li>${inlineMarkdown(itemText)}</li>`);
         continue;
       }
-      
-      // Check for bullet points (- item or • item)
-      const bulletMatch = line.match(/^[-•]\s+(.+)$/);
-      if (bulletMatch) {
-        if (listType !== 'ul') {
-          if (currentList.length > 0 && listType === 'ol') {
-            result.push(`<ol>${currentList.join('')}</ol>`);
-            currentList = [];
-          }
-          listType = 'ul';
-        }
-        currentList.push(`<li>${bulletMatch[1]}</li>`);
-        continue;
-      }
-      
-      // Regular text line - close any open list first
-      if (currentList.length > 0) {
-        const tag = listType === 'ol' ? 'ol' : 'ul';
-        result.push(`<${tag}>${currentList.join('')}</${tag}>`);
-        currentList = [];
-        listType = null;
-      }
-      
-      // Add as paragraph
-      result.push(`<p>${line}</p>`);
+
+      // ── Regular paragraph text ──
+      closeAllLists();
+      html.push(`<p>${inlineMarkdown(trimmed)}</p>`);
     }
-    
-    // Close any remaining list
-    if (currentList.length > 0) {
-      const tag = listType === 'ol' ? 'ol' : 'ul';
-      result.push(`<${tag}>${currentList.join('')}</${tag}>`);
-    }
-    
-    return result.join('');
+
+    // ── Close any remaining open lists ──
+    closeAllLists();
+
+    return html.join('');
   }
 }
