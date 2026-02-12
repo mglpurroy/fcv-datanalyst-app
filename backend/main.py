@@ -37,6 +37,7 @@ from services.data_loader import DataLoaderService, DEFAULT_ACLED_PATH
 from services.llm_service import LLMService
 from services.code_executor import CodeExecutorService
 from services.sql_service import SQLService
+from services.data360_service import Data360Service
 from models import (
     ChatMessage, ChatRequest, ChatResponse, Chart,
     DataLoadRequest, DataLoadResponse, DataLoadPathRequest,
@@ -70,6 +71,7 @@ data_loader = DataLoaderService()
 llm_service = LLMService()
 code_executor = CodeExecutorService()
 sql_service = SQLService()
+data360_service = Data360Service()
 
 # In-memory storage (replace with Redis/database for production)
 sessions = {}
@@ -336,6 +338,17 @@ async def chat(request: ChatRequest):
         # Get schema for system prompt
         schema = data_loader.get_schema(df)
         
+        # Optional enrichment: load World Bank population data only when requested.
+        df_pop = pd.DataFrame()
+        population_warnings: List[str] = []
+        if data360_service.needs_population_data(request.message):
+            try:
+                pop_result = data360_service.build_population_for_acled(df)
+                df_pop = pop_result.df_pop
+                population_warnings = pop_result.warnings
+            except Exception as pop_error:
+                population_warnings = [f"Population enrichment failed: {str(pop_error)}"]
+
         # Agentic: get structured query spec first (planning step)
         query_spec = await llm_service.get_query_spec(request.message)
         
@@ -347,6 +360,17 @@ async def chat(request: ChatRequest):
             if c in df.columns and c not in columns_to_profile:
                 columns_to_profile.append(c)
         schema["column_profile"] = data_loader.get_column_profile(df, columns_to_profile)
+        if not df_pop.empty:
+            schema["aux_dataframes"] = {
+                "df_pop": {
+                    "description": "World Bank WDI population loaded from Data360 API",
+                    "columns": list(df_pop.columns),
+                    "shape": df_pop.shape,
+                    "join_guidance": "Join ACLED and population with country + year. Build year from event_date if needed.",
+                }
+            }
+        if population_warnings:
+            schema["aux_warnings"] = population_warnings
         
         # Call LLM to get code (with spec if we got one)
         llm_response = await llm_service.get_analysis_code(
@@ -400,7 +424,7 @@ async def chat(request: ChatRequest):
                     summary_data=None,
                     narrative=None
                 )
-        execution_result = code_executor.execute_safely(code, df)
+        execution_result = code_executor.execute_safely(code, df, df_pop=df_pop)
         out_output = execution_result.get("output", "")
         out_success = execution_result.get("success", False)
         out_error = execution_result.get("error")

@@ -104,7 +104,7 @@ class CodeExecutorService:
                     return text
         return None
     
-    def execute_safely(self, code: str, df: pd.DataFrame) -> Dict[str, Any]:
+    def execute_safely(self, code: str, df: pd.DataFrame, df_pop: Optional[pd.DataFrame] = None) -> Dict[str, Any]:
         """Execute Python code in a safe environment"""
         # Prepare chart buffer
         chart_buffer = io.BytesIO()
@@ -150,6 +150,7 @@ class CodeExecutorService:
             'px': px,
             'go': go,
             'df': df,
+            'df_pop': df_pop if df_pop is not None else pd.DataFrame(),
             'datetime': datetime,
             'print': print,
             'len': len,

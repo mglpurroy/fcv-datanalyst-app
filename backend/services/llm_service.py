@@ -116,6 +116,8 @@ class LLMService:
 - Columns: {columns_str}
 - Value info (use only these values when filtering): {schema.get('value_info', {})}
 - Column profile (dtype and value_counts for analysis-relevant columns; use this to see actual format and values before writing filters): {schema.get('column_profile', {})}
+- Optional auxiliary dataframes: {schema.get('aux_dataframes', {})}
+- Optional auxiliary warnings: {schema.get('aux_warnings', [])}
 
 **Available Python Packages (already imported - DO NOT import them):**
 - pandas (as pd) - Data manipulation and analysis
@@ -132,6 +134,7 @@ class LLMService:
 - If a filter or aggregation yields 0 rows: print diagnostics (row count after each filter step, and value_counts for columns you used). Then adapt: try a different column (e.g. 'interaction' if inter1/inter2 gave no rows), coerce types, or an alternative definition. Do not save a CSV with 0 rows—either fix the pipeline so it produces rows or print a clear message that no data matched.
 - When building boolean masks from string columns (e.g. .str.contains), handle missing values so operations like negation don't fail (e.g. na=False or .fillna(False)).
 - For state vs non-state (or actor-type) analysis: do not assume actor1 is always non-state or actor2 always state—both columns can contain either. Use the type columns (inter1, inter2) from the column profile to identify which value(s) mean state, civilians, and non-state armed. Build a long-format table by taking actor names only when the corresponding type column matches the desired type: (A) rows where inter1 is non-state armed (and not state, not civilians): select [country, admin1, actor1, event_id_cnty, fatalities], rename actor1 to actor; (B) rows where inter2 is non-state armed: select [country, admin1, actor2, event_id_cnty, fatalities], rename actor2 to actor. Do not filter the whole dataframe to "drop state rows" and then take all actor1 and actor2—that counts the wrong set. After concat, drop rows where actor is missing or in ['Unidentified', 'Unknown', ''] (or similar). Then groupby(['country', 'admin1', 'actor']).agg(...).
+- If auxiliary dataframe `df_pop` is available and the user asks for population or per-capita rates, use `df_pop` for the join. Build `year` from `event_date` in `df`, join on `['country', 'year']`, and guard against divide-by-zero/null population.
 
 **OUT OF SCOPE (do not generate code):**
 - If the user's question is NOT a quantitative data analysis question (e.g. root causes of conflict, "why did X happen?", policy recommendations, definitions, general knowledge), do NOT output any code. Reply with ONLY this exact sentence, and nothing else: "I am designed to address FCV-focused data queries. Your question is beyond my remit. Please reformulate it as a data-focused question I can help with (e.g. trends, counts, maps, rankings from the dataset)."
